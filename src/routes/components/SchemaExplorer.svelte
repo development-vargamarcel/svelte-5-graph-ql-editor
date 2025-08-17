@@ -9,8 +9,8 @@
   let selectedType = $state(null);
   let storeState = $state({});
   
-  let nestedFieldState = $state(new Map()); // Tracks expanded/selected state for nested fields
-  let selectedFields = $state(new Map()); // Tracks which fields are selected at each level
+  let expandedFields = $state(new Set()); // Tracks expanded state for nested fields
+  let selectedFields = $state(new Set()); // Tracks which fields are selected at each level
 
   let filteredTypes = $state([]);
   let queryType = $state(null);
@@ -49,35 +49,28 @@
   function selectType(type) {
     console.log('[v0] SchemaExplorer: Selecting type:', type);
     selectedType = type;
-    nestedFieldState.clear();
+    expandedFields.clear();
     selectedFields.clear();
   }
 
-  function toggleFieldExpansion(fieldPath, field) {
+  function toggleFieldExpansion(fieldPath) {
     console.log('[v0] SchemaExplorer: Toggling field expansion for path:', fieldPath);
-    const currentState = nestedFieldState.get(fieldPath) || { expanded: false, fields: [] };
-    
-    if (!currentState.expanded) {
-      // Expand field - load its sub-fields if it's an object type
-      const fieldType = getFieldType(field);
-      const typeDefinition = storeState.schema?.types?.find(t => t.name === fieldType);
-      
-      if (typeDefinition && typeDefinition.fields) {
-        currentState.fields = typeDefinition.fields;
-        console.log('[v0] SchemaExplorer: Loaded sub-fields for', fieldPath, ':', typeDefinition.fields.length);
-      }
+    if (expandedFields.has(fieldPath)) {
+      expandedFields.delete(fieldPath);
+    } else {
+      expandedFields.add(fieldPath);
     }
-    
-    currentState.expanded = !currentState.expanded;
-    nestedFieldState.set(fieldPath, currentState);
-    nestedFieldState = new Map(nestedFieldState); // Trigger reactivity
+    expandedFields = new Set(expandedFields); // Trigger reactivity
   }
 
-  function toggleFieldSelection(fieldPath, field) {
+  function toggleFieldSelection(fieldPath) {
     console.log('[v0] SchemaExplorer: Toggling field selection for path:', fieldPath);
-    const isSelected = selectedFields.get(fieldPath) || false;
-    selectedFields.set(fieldPath, !isSelected);
-    selectedFields = new Map(selectedFields); // Trigger reactivity
+    if (selectedFields.has(fieldPath)) {
+      selectedFields.delete(fieldPath);
+    } else {
+      selectedFields.add(fieldPath);
+    }
+    selectedFields = new Set(selectedFields); // Trigger reactivity
     
     // Update query structure
     updateQueryFromSelection();
@@ -109,7 +102,7 @@
       
       for (const field of typeDefinition.fields) {
         const fieldPath = pathPrefix ? `${pathPrefix}.${field.name}` : field.name;
-        const isSelected = selectedFields.get(fieldPath);
+        const isSelected = selectedFields.has(fieldPath);
         
         if (isSelected) {
           const fieldObj = {
@@ -323,7 +316,16 @@
         
         <div class="space-y-1 max-h-60 overflow-y-auto border border-gray-200 rounded p-2">
           {#each selectedType.fields || [] as field}
-            <FieldRenderer {field} pathPrefix="" depth={0} />
+            <FieldRenderer 
+              {field} 
+              typeName={selectedType.name}
+              {selectedFields}
+              {expandedFields}
+              fieldPath={field.name}
+              depth={0}
+              onFieldToggle={toggleFieldSelection}
+              onExpandToggle={toggleFieldExpansion}
+            />
           {/each}
         </div>
         
@@ -331,7 +333,7 @@
           <div class="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
             <div class="font-medium text-blue-800">Selected Fields:</div>
             <div class="text-blue-700 mt-1">
-              {Array.from(selectedFields.keys()).join(', ')}
+              {Array.from(selectedFields).join(', ')}
             </div>
           </div>
         {/if}

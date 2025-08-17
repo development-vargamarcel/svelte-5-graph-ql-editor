@@ -9,6 +9,7 @@
     typeName, 
     selectedFields, 
     expandedFields, 
+    fieldPath = field.name,
     depth = 0,
     onFieldToggle,
     onExpandToggle 
@@ -22,7 +23,7 @@
     return unsubscribe;
   });
 
-  console.log('[v0] FieldRenderer props:', { field, typeName, depth });
+  console.log('[v0] FieldRenderer props:', { field, typeName, fieldPath, depth });
 
   // Get the base type (unwrap NonNull and List wrappers)
   function getBaseType(type) {
@@ -67,20 +68,20 @@
 
   // Handle field selection toggle
   function handleFieldToggle() {
-    console.log('[v0] Field toggle:', field.name);
-    onFieldToggle?.(field.name);
+    console.log('[v0] Field toggle:', fieldPath);
+    onFieldToggle?.(fieldPath, field);
   }
 
   // Handle expand/collapse toggle
   function handleExpandToggle() {
-    console.log('[v0] Expand toggle:', field.name);
-    onExpandToggle?.(field.name);
+    console.log('[v0] Expand toggle:', fieldPath);
+    onExpandToggle?.(fieldPath, field);
   }
 
   // Handle arguments expand/collapse
   function handleArgumentsToggle() {
-    console.log('[v0] Arguments toggle:', field.name);
-    onExpandToggle?.(`${field.name}:args`);
+    console.log('[v0] Arguments toggle:', fieldPath);
+    onExpandToggle?.(`${fieldPath}:args`, field);
   }
 
   // Format argument type and default value
@@ -93,10 +94,10 @@
   const baseType = $derived(getBaseType(field.type));
   const canExpand = $derived(isExpandableType(field.type));
   const subFields = $derived(canExpand ? getFieldsForType(baseType?.name) : []);
-  const isSelected = $derived(selectedFields.has(field.name));
-  const isExpanded = $derived(expandedFields.has(field.name));
+  const isSelected = $derived(selectedFields?.has(fieldPath) || false);
+  const isExpanded = $derived(expandedFields?.has(fieldPath) || false);
   const hasArguments = $derived(field.args && field.args.length > 0);
-  const argumentsExpanded = $derived(expandedFields.has(`${field.name}:args`));
+  const argumentsExpanded = $derived(expandedFields?.has(`${fieldPath}:args`) || false);
   
   // Check if we should show the field as expandable (has sub-fields or arguments)
   const shouldShowExpander = $derived(canExpand || hasArguments);
@@ -105,6 +106,7 @@
   $effect(() => {
     console.log('[v0] FieldRenderer state:', { 
       fieldName: field.name, 
+      fieldPath,
       isSelected, 
       isExpanded, 
       canExpand, 
@@ -240,6 +242,7 @@
             typeName={baseType?.name}
             {selectedFields}
             {expandedFields}
+            fieldPath={`${fieldPath}.${subField.name}`}
             depth={depth + 1}
             {onFieldToggle}
             {onExpandToggle}
