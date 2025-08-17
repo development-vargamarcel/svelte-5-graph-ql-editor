@@ -981,7 +981,8 @@ function createGraphQLStore() {
 // Helper function to get current store value
 function get(store) {
   let value
-  store.subscribe((v) => (value = v))()
+  const unsubscribe = store.subscribe((v) => (value = v))
+  unsubscribe()
   return value
 }
 

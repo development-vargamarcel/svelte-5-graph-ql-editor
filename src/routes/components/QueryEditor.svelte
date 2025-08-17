@@ -7,6 +7,7 @@
 
   let query = $state('');
   let isExecuting = $state(false);
+  let updateTimeout = null;
 
   // Subscribe to store changes
   $effect(() => {
@@ -24,8 +25,13 @@
     const newQuery = event.target.value;
     console.log('[v0] QueryEditor: Query changed, new length:', newQuery.length);
     query = newQuery;
-    clearTimeout(handleQueryChange.timeout);
-    handleQueryChange.timeout = setTimeout(() => {
+    
+    // Clear existing timeout to prevent multiple updates
+    if (updateTimeout) {
+      clearTimeout(updateTimeout);
+    }
+    
+    updateTimeout = setTimeout(() => {
       graphqlStore.updateQuery(newQuery);
     }, 300);
   }

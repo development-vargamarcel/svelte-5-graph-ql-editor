@@ -2,6 +2,7 @@
   import FieldRenderer from './FieldRenderer.svelte';
   import { graphqlStore } from '../stores/graphql-store.js';
   
+  let storeValue = $state(null);
 
   let { 
     field, 
@@ -12,6 +13,14 @@
     onFieldToggle,
     onExpandToggle 
   } = $props();
+
+  // Subscribe to store changes once
+  $effect(() => {
+    const unsubscribe = graphqlStore.subscribe(state => {
+      storeValue = state;
+    });
+    return unsubscribe;
+  });
 
   console.log('[v0] FieldRenderer props:', { field, typeName, depth });
 
@@ -37,8 +46,7 @@
   // Get fields for a type from schema
   function getFieldsForType(typeName) {
     console.log('[v0] Getting fields for type:', typeName);
-    const storeValue = graphqlStore.get();
-    const type = storeValue.schema?.types?.find(t => t.name === typeName);
+    const type = storeValue?.schema?.types?.find(t => t.name === typeName);
     const fields = type?.fields || [];
     console.log('[v0] Found fields:', fields.length);
     return fields;

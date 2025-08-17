@@ -17,6 +17,7 @@
   let selectedFields = $state(new Set());
   let showQuickAdd = null;
   let searchTerm = $state('');
+  let syncTimeout = null;
 
   $effect(() => {
     console.log('[v0] VisualBuilder: Setting up store subscription');
@@ -55,14 +56,17 @@
     
     graphqlStore.updateCurrentOperation(currentOperation);
     
-    // Rebuild query text from visual structure
-    const queryText = buildQueryFromStructure(currentOperation);
-    console.log('[v0] VisualBuilder: Built query text from visual structure:', queryText);
+    // Clear existing timeout to prevent multiple updates
+    if (syncTimeout) {
+      clearTimeout(syncTimeout);
+    }
     
     // Use a timeout to prevent infinite loops during sync
-    setTimeout(() => {
+    syncTimeout = setTimeout(() => {
+      const queryText = buildQueryFromStructure(currentOperation);
+      console.log('[v0] VisualBuilder: Built query text from visual structure:', queryText);
       graphqlStore.updateQuery(queryText);
-    }, 10);
+    }, 100);
   }
 
   function buildQueryFromStructure(operation) {

@@ -12,22 +12,33 @@
   let nestedFieldState = $state(new Map()); // Tracks expanded/selected state for nested fields
   let selectedFields = $state(new Map()); // Tracks which fields are selected at each level
 
-  graphqlStore.subscribe(state => {
-    console.log('[v0] SchemaExplorer: Store state updated:', state);
-    storeState = state;
-  });
-
   let filteredTypes = $state([]);
   let queryType = $state(null);
   let mutationType = $state(null);
 
-  run(() => {
-    filteredTypes = storeState.schema?.types?.filter(type => 
-      type.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !type.name.startsWith('__')
-    ) || [];
-    queryType = storeState.schema?.queryType;
-    mutationType = storeState.schema?.mutationType;
+  // Subscribe to store changes
+  $effect(() => {
+    const unsubscribe = graphqlStore.subscribe(state => {
+      console.log('[v0] SchemaExplorer: Store state updated:', state);
+      storeState = state;
+    });
+    return unsubscribe;
+  });
+
+  // Update filtered types when schema or search term changes
+  $effect(() => {
+    if (storeState.schema) {
+      filteredTypes = storeState.schema.types?.filter(type => 
+        type.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !type.name.startsWith('__')
+      ) || [];
+      queryType = storeState.schema.queryType;
+      mutationType = storeState.schema.mutationType;
+    } else {
+      filteredTypes = [];
+      queryType = null;
+      mutationType = null;
+    }
   });
 
   async function loadSchema() {
