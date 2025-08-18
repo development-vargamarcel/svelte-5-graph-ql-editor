@@ -8,13 +8,13 @@
   let query = $state('');
   let isExecuting = $state(false);
   let updateTimeout = null;
-  let isUpdating = false; // Prevent update loops
+  let syncEnabled = false; // Disable syncing to prevent loops
 
   // Subscribe to store changes
   $effect(() => {
     const unsubscribe = graphqlStore.subscribe(state => {
       console.log('[v0] QueryEditor: Store state updated, query length:', state.query.length);
-      if (state.query !== query && !isUpdating) {
+      if (state.query !== query && syncEnabled) {
         query = state.query;
       }
       isExecuting = state.loading;
@@ -23,8 +23,8 @@
   });
 
   function handleQueryChange(event) {
-    if (isUpdating) {
-      console.log('[v0] QueryEditor: Already updating, skipping change');
+    if (!syncEnabled) {
+      console.log('[v0] QueryEditor: Syncing disabled, not updating store');
       return;
     }
     
@@ -37,12 +37,8 @@
       clearTimeout(updateTimeout);
     }
     
-    isUpdating = true;
     updateTimeout = setTimeout(() => {
       graphqlStore.updateQuery(newQuery);
-      setTimeout(() => {
-        isUpdating = false;
-      }, 100);
     }, 300);
   }
 
@@ -63,11 +59,33 @@
     console.log('[v0] QueryEditor: Formatted query:', formatted);
     graphqlStore.updateQuery(formatted);
   }
+
+  function toggleSync() {
+    syncEnabled = !syncEnabled;
+    console.log('[v0] QueryEditor: Sync toggled:', syncEnabled);
+    if (syncEnabled) {
+      // Sync current query to store when re-enabling
+      graphqlStore.updateQuery(query);
+    }
+  }
 </script>
 
 <div class="h-full flex flex-col {darkMode ? 'text-white' : 'text-gray-900'}">
   <div class="flex items-center justify-between mb-4">
-    <h2 class="text-lg font-semibold">GraphQL Query Editor</h2>
+    <div class="flex items-center space-x-4">
+      <h2 class="text-lg font-semibold">GraphQL Query Editor</h2>
+      <div class="flex items-center space-x-2">
+        <span class="px-2 py-1 rounded text-xs {syncEnabled ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}">
+          {syncEnabled ? '🔄 Sync ON' : '🚫 Sync OFF'}
+        </span>
+        <button
+          onclick={toggleSync}
+          class="px-2 py-1 rounded text-xs {syncEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white transition-colors"
+        >
+          {syncEnabled ? 'Disable Sync' : 'Enable Sync'}
+        </button>
+      </div>
+    </div>
     <div class="flex space-x-2">
       <button
         onclick={formatQuery}
@@ -97,9 +115,9 @@
   <div class="mt-4 text-sm {darkMode ? 'text-gray-300' : 'text-gray-600'}">
     <p>💡 <strong>Tips:</strong></p>
     <ul class="list-disc list-inside space-y-1 mt-2">
-      <li>Use Ctrl+Space for autocomplete (when schema is loaded)</li>
+      <li class="text-red-600">⚠️ Sync with Visual Builder is currently disabled</li>
       <li>Click "Format" to auto-indent your query</li>
-      <li>Switch to "Visual Builder" tab to build queries visually</li>
+      <li>Visual Builder operates independently - enable sync to connect them</li>
       <li>Check the "Variables" tab to define query variables</li>
     </ul>
   </div>

@@ -18,13 +18,13 @@
   let showQuickAdd = null;
   let searchTerm = $state('');
   let syncTimeout = null;
-  let isUpdating = false; // Prevent update loops
+  let syncEnabled = false; // Disable syncing to prevent loops
 
   $effect(() => {
     console.log('[v0] VisualBuilder: Setting up store subscription');
     const unsubscribe = graphqlStore.subscribe(state => {
-      if (isUpdating) {
-        console.log('[v0] VisualBuilder: Skipping update to prevent loop');
+      if (!syncEnabled) {
+        console.log('[v0] VisualBuilder: Syncing disabled, skipping update');
         return;
       }
       
@@ -60,26 +60,13 @@
     console.log('[v0] VisualBuilder: Updating current operation and syncing to text editor');
     if (!currentOperation) return;
     
-    if (isUpdating) {
-      console.log('[v0] VisualBuilder: Already updating, preventing loop');
+    if (!syncEnabled) {
+      console.log('[v0] VisualBuilder: Syncing disabled, not updating store');
       return;
     }
     
-    isUpdating = true;
-    graphqlStore.updateCurrentOperation(currentOperation);
-    
-    // Clear existing timeout to prevent multiple updates
-    if (syncTimeout) {
-      clearTimeout(syncTimeout);
-    }
-    
-    // Use a timeout to prevent infinite loops during sync
-    syncTimeout = setTimeout(() => {
-      const queryText = buildQueryFromStructure(currentOperation);
-      console.log('[v0] VisualBuilder: Built query text from visual structure:', queryText);
-      graphqlStore.updateQuery(queryText);
-      isUpdating = false;
-    }, 100);
+    // Syncing disabled - visual builder operates independently
+    console.log('[v0] VisualBuilder: Visual builder updated but not synced to text editor');
   }
 
   function buildQueryFromStructure(operation) {
@@ -345,30 +332,35 @@
 
   function handleOperationTypeChange(event) {
     if (currentOperation) {
-      if (isUpdating) return;
       currentOperation.type = event.target.value;
-      updateCurrentOperation();
+      // Don't sync to store
     }
   }
 
   function handleOperationNameInput(event) {
     if (currentOperation) {
-      if (isUpdating) return;
       currentOperation.name = event.target.value;
-      updateCurrentOperation();
+      // Don't sync to store
     }
   }
 
   function handleVariableNameInput(variable, event) {
-    if (isUpdating) return;
     variable.name = event.target.value;
-    updateCurrentOperation();
+    // Don't sync to store
   }
 
   function handleVariableTypeChange(variable, event) {
-    if (isUpdating) return;
     variable.type = event.target.value;
-    updateCurrentOperation();
+    // Don't sync to store
+  }
+
+  function toggleSync() {
+    syncEnabled = !syncEnabled;
+    console.log('[v0] VisualBuilder: Sync toggled:', syncEnabled);
+    if (syncEnabled && currentOperation) {
+      // Sync current state to store when re-enabling
+      graphqlStore.updateCurrentOperation(currentOperation);
+    }
   }
 </script>
 
@@ -378,10 +370,16 @@
     <div class="p-3 rounded-lg border transition-colors duration-200 {darkMode ? 'bg-blue-900 border-blue-700 text-blue-200' : 'bg-blue-50 border-blue-200'}">
       <div class="text-sm {darkMode ? 'text-blue-200' : 'text-blue-800'}">
         <strong>Shortcuts:</strong> Ctrl+Enter (Add), Ctrl+Delete (Remove), Ctrl+D (Duplicate), Drag to reorder
-        <!-- Added sync status indicator -->
-        <span class="ml-4 px-2 py-1 rounded text-xs {currentOperation ? 'bg-green-500 text-white' : 'bg-gray-500 text-white'}">
-          {currentOperation ? '🔄 Synced' : '⚪ Empty'}
+        <!-- Updated sync status indicator -->
+        <span class="ml-4 px-2 py-1 rounded text-xs {syncEnabled ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}">
+          {syncEnabled ? '🔄 Sync ON' : '🚫 Sync OFF'}
         </span>
+        <button
+          onclick={toggleSync}
+          class="ml-2 px-2 py-1 rounded text-xs {syncEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white transition-colors"
+        >
+          {syncEnabled ? 'Disable Sync' : 'Enable Sync'}
+        </button>
       </div>
     </div>
 
@@ -514,16 +512,15 @@
             <input
               type="text"
               bind:value={variable.name}
-              oninput={(e) => handleVariableNameInput(variable, e)}
+              oninput={(e) => { variable.name = e.target.value; }}
               placeholder="variableName"
               class="flex-1 px-2 py-1 border rounded text-sm font-medium focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all {darkMode ? 'bg-gray-600 border-gray-500 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'}"
-              list="field-suggestions-{depth}-{fieldIndex}"
             />
             
             <span class="text-sm {darkMode ? 'text-gray-400' : 'text-gray-600'}">:</span>
             <select
               value={variable.type}
-              onchange={(e) => handleVariableTypeChange(variable, e)}
+              onchange={(e) => { variable.type = e.target.value; }}
               class="px-1 py-1 border rounded text-sm focus:ring-1 focus:ring-purple-200 transition-colors duration-200 {darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'}"
             >
               <option value="String">String</option>
@@ -535,7 +532,7 @@
               <option value="ID">ID</option>
             </select>
             <button
-              onclick={() => { currentOperation.variables.splice(index, 1); updateCurrentOperation(); }}
+              onclick={() => { currentOperation.variables.splice(index, 1); }}
               class="px-1 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors duration-200"
             >
               ×
@@ -579,8 +576,8 @@
             <div class="text-lg font-medium mb-2">No fields yet</div>
             <div class="text-sm mb-4">Start building your GraphQL {currentOperation.type} by adding fields</div>
             <!-- Added sync hint in empty state -->
-            <div class="text-xs mb-4 {darkMode ? 'text-yellow-400' : 'text-yellow-600'}">
-              💡 Changes here will sync with the Query Editor automatically
+            <div class="text-xs mb-4 {darkMode ? 'text-red-400' : 'text-red-600'}">
+              ⚠️ Sync with Query Editor is currently disabled
             </div>
             {#if currentSchema}
               <div class="text-xs mb-4 {darkMode ? 'text-blue-400' : 'text-blue-600'}">Schema loaded - only valid fields can be added</div>
@@ -603,7 +600,7 @@
         <div class="text-xl font-medium mb-2">Ready to build GraphQL queries</div>
         <div class="text-sm mb-6">
           Start by typing in the Query Editor or create an operation here.<br/>
-          Changes will sync automatically between text and visual modes.
+          <span class="text-red-600">Note: Sync between text and visual modes is currently disabled.</span>
         </div>
         <div class="flex justify-center space-x-3">
           <button
@@ -747,11 +744,10 @@
               <input
                 type="text"
                 bind:value={field.name}
-                oninput={updateCurrentOperation}
+                oninput={() => {}}
                 onkeydown={(e) => handleKeydown(e, { type: 'field', field, parentFields: fields, index: fieldIndex, typeName: parentTypeName, fieldPath })}
                 placeholder="fieldName"
                 class="flex-1 px-2 py-1 border rounded text-sm font-medium focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all {darkMode ? 'bg-gray-600 border-gray-500 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'}"
-                list="field-suggestions-{depth}-{fieldIndex}"
               />
               
               <!-- Quick action buttons that appear on hover -->
@@ -816,7 +812,7 @@
                       <input
                         type="text"
                         bind:value={arg.name}
-                        oninput={updateCurrentOperation}
+                        oninput={() => {}}
                         placeholder="argName"
                         class="flex-1 px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-purple-200 transition-colors duration-200 {darkMode ? 'bg-gray-600 border-gray-500 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'}"
                       />
@@ -824,13 +820,13 @@
                       <input
                         type="text"
                         bind:value={arg.value}
-                        oninput={updateCurrentOperation}
+                        oninput={() => {}}
                         placeholder="value"
                         class="flex-1 px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-purple-200 transition-colors duration-200 {darkMode ? 'bg-gray-600 border-gray-500 text-white placeholder-gray-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'}"
                       />
                       <select
                         bind:value={arg.type}
-                        onchange={updateCurrentOperation}
+                        onchange={() => {}}
                         class="px-1 py-1 border rounded text-xs focus:ring-1 focus:ring-purple-200 transition-colors duration-200 {darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300 text-gray-900'}"
                       >
                         <option value="String">String</option>
