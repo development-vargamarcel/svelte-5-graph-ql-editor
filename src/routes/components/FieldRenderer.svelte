@@ -3,6 +3,7 @@
   import { graphqlStore } from '../stores/graphql-store.js';
   
   let storeValue = $state(null);
+  let maxDepth = 10; // Prevent infinite recursion
 
   let { 
     field, 
@@ -14,6 +15,11 @@
     onFieldToggle,
     onExpandToggle 
   } = $props();
+
+  // Prevent infinite recursion by limiting depth
+  if (depth > maxDepth) {
+    console.warn('[v0] FieldRenderer: Maximum depth reached, preventing infinite recursion');
+  }
 
   // Subscribe to store changes once
   $effect(() => {
@@ -47,6 +53,18 @@
   // Get fields for a type from schema
   function getFieldsForType(typeName) {
     console.log('[v0] Getting fields for type:', typeName);
+    
+    // Prevent circular references by checking if we're already processing this type in the current path
+    const pathTypes = fieldPath.split('.').map(segment => {
+      // Extract type information from field path if available
+      return segment;
+    });
+    
+    if (pathTypes.filter(t => t === typeName).length > 2) {
+      console.warn('[v0] FieldRenderer: Circular reference detected for type:', typeName);
+      return [];
+    }
+    
     const type = storeValue?.schema?.types?.find(t => t.name === typeName);
     const fields = type?.fields || [];
     console.log('[v0] Found fields:', fields.length);
@@ -118,6 +136,11 @@
   });
 </script>
 
+{#if depth > maxDepth}
+  <div class="text-red-500 text-sm p-2 border border-red-300 rounded">
+    ⚠️ Maximum nesting depth reached. Circular reference prevented.
+  </div>
+{:else}
 <div class="relative">
   <!-- Tree connection lines -->
   {#if depth > 0}
@@ -252,6 +275,7 @@
     </div>
   {/if}
 </div>
+{/if}
 
 <style>
   .field-item {

@@ -8,12 +8,13 @@
   let query = $state('');
   let isExecuting = $state(false);
   let updateTimeout = null;
+  let isUpdating = false; // Prevent update loops
 
   // Subscribe to store changes
   $effect(() => {
     const unsubscribe = graphqlStore.subscribe(state => {
       console.log('[v0] QueryEditor: Store state updated, query length:', state.query.length);
-      if (state.query !== query) {
+      if (state.query !== query && !isUpdating) {
         query = state.query;
       }
       isExecuting = state.loading;
@@ -22,6 +23,11 @@
   });
 
   function handleQueryChange(event) {
+    if (isUpdating) {
+      console.log('[v0] QueryEditor: Already updating, skipping change');
+      return;
+    }
+    
     const newQuery = event.target.value;
     console.log('[v0] QueryEditor: Query changed, new length:', newQuery.length);
     query = newQuery;
@@ -31,8 +37,12 @@
       clearTimeout(updateTimeout);
     }
     
+    isUpdating = true;
     updateTimeout = setTimeout(() => {
       graphqlStore.updateQuery(newQuery);
+      setTimeout(() => {
+        isUpdating = false;
+      }, 100);
     }, 300);
   }
 

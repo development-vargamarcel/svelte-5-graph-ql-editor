@@ -94,11 +94,26 @@
     
     if (!selectedType) return;
     
-    const buildNestedFields = (typeName, pathPrefix = '') => {
+    const buildNestedFields = (typeName, pathPrefix = '', visitedTypes = new Set(), depth = 0) => {
+      // Prevent infinite recursion
+      if (depth > 10) {
+        console.warn('[v0] SchemaExplorer: Maximum depth reached, preventing infinite recursion');
+        return [];
+      }
+      
+      // Prevent circular references
+      if (visitedTypes.has(typeName)) {
+        console.warn('[v0] SchemaExplorer: Circular reference detected for type:', typeName);
+        return [];
+      }
+      
       const fields = [];
       const typeDefinition = storeState.schema?.types?.find(t => t.name === typeName);
       
       if (!typeDefinition?.fields) return fields;
+      
+      const newVisitedTypes = new Set(visitedTypes);
+      newVisitedTypes.add(typeName);
       
       for (const field of typeDefinition.fields) {
         const fieldPath = pathPrefix ? `${pathPrefix}.${field.name}` : field.name;
@@ -123,7 +138,7 @@
           // Recursively build nested fields if this is an object type
           if (isObjectType(field)) {
             const fieldType = getFieldType(field);
-            fieldObj.fields = buildNestedFields(fieldType, fieldPath);
+            fieldObj.fields = buildNestedFields(fieldType, fieldPath, newVisitedTypes, depth + 1);
           }
           
           fields.push(fieldObj);

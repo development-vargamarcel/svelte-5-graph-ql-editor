@@ -503,6 +503,7 @@ function createGraphQLStore() {
     },
     currentSchemaKey: null,
     availableSchemas: DEMO_SCHEMAS,
+    isUpdating: false, // Prevent circular updates
   }
 
   const { subscribe, set, update } = writable(initialState)
@@ -632,19 +633,38 @@ function createGraphQLStore() {
     updateQueryStructure: (newStructure) => {
       console.log("[v0] graphql-store: Updating query structure:", newStructure)
       update((state) => {
+        if (state.isUpdating) {
+          console.log("[v0] graphql-store: Already updating, preventing circular update");
+          return state;
+        }
+        
+        const newState = { ...state, isUpdating: true };
         const newQuery = buildQueryFromStructure(newStructure)
         console.log("[v0] graphql-store: Built query from structure:", newQuery)
-        return {
-          ...state,
+        
+        const result = {
+          ...newState,
           queryStructure: newStructure,
           query: newQuery,
-        }
+        };
+        
+        // Reset updating flag after a brief delay
+        setTimeout(() => {
+          update(s => ({ ...s, isUpdating: false }));
+        }, 50);
+        
+        return result;
       })
     },
 
     updateCurrentOperation: (updatedOperation) => {
       console.log("[v0] graphql-store: Updating current operation:", updatedOperation)
       update((state) => {
+        if (state.isUpdating) {
+          console.log("[v0] graphql-store: Already updating, preventing circular update");
+          return state;
+        }
+        
         const newOperations = [...state.queryStructure.operations]
         newOperations[state.queryStructure.activeOperationIndex] = updatedOperation
 
@@ -653,11 +673,19 @@ function createGraphQLStore() {
           operations: newOperations,
         }
 
-        return {
+        const newState = {
           ...state,
+          isUpdating: true,
           queryStructure: newStructure,
           query: buildQueryFromStructure(newStructure),
-        }
+        };
+        
+        // Reset updating flag after a brief delay
+        setTimeout(() => {
+          update(s => ({ ...s, isUpdating: false }));
+        }, 50);
+        
+        return newState;
       })
     },
 
@@ -677,7 +705,15 @@ function createGraphQLStore() {
     addFieldToQuery: (fieldPath, fieldName, args = []) => {
       console.log("[v0] graphql-store: Adding field to query:", { fieldPath, fieldName, args })
 
+      // Prevent adding duplicate fields at the same path
+      const pathKey = [...fieldPath, fieldName].join('.');
+      
       update((state) => {
+        if (state.isUpdating) {
+          console.log("[v0] graphql-store: Already updating, skipping field addition");
+          return state;
+        }
+        
         const newStructure = { ...state.queryStructure }
 
         if (fieldPath.length === 0) {
@@ -694,7 +730,12 @@ function createGraphQLStore() {
           }
         } else {
           // Adding to nested level
-          const addToNestedField = (fields, path, depth = 0) => {
+          const addToNestedField = (fields, path, depth = 0, maxDepth = 10) => {
+            if (depth > maxDepth) {
+              console.warn("[v0] graphql-store: Maximum nesting depth reached, preventing infinite recursion");
+              return;
+            }
+            
             if (depth >= path.length) return
 
             const currentFieldName = path[depth]
@@ -716,7 +757,7 @@ function createGraphQLStore() {
               }
             } else {
               // Continue deeper
-              addToNestedField(field.fields, path, depth + 1)
+              addToNestedField(field.fields, path, depth + 1, maxDepth)
             }
           }
 
@@ -781,9 +822,21 @@ function createGraphQLStore() {
     updateQuery: (newQuery) => {
       console.log("[v0] graphql-store: Updating query:", newQuery)
       update((state) => {
+        if (state.isUpdating) {
+          console.log("[v0] graphql-store: Already updating, preventing circular update");
+          return state;
+        }
+        
         const newState = { ...state, query: newQuery }
+        newState.isUpdating = true;
         newState.queryStructure = parseQuery(newQuery)
         console.log("[v0] graphql-store: Parsed query structure:", newState.queryStructure)
+        
+        // Reset updating flag after a brief delay
+        setTimeout(() => {
+          update(s => ({ ...s, isUpdating: false }));
+        }, 50);
+        
         return newState
       })
     },
@@ -965,9 +1018,16 @@ function createGraphQLStore() {
       if (!currentState.schema) return []
 
       let currentTypeName = "Query" // Start with root query type
+      const visitedTypes = new Set(); // Track visited types to prevent circular references
 
       // Walk through the field path to determine the current type
       for (const pathSegment of fieldPath) {
+        if (visitedTypes.has(currentTypeName)) {
+          console.warn("[v0] graphql-store: Circular reference detected in field path:", fieldPath);
+          return [];
+        }
+        visitedTypes.add(currentTypeName);
+        
         const returnType = store.getFieldReturnType(currentTypeName, pathSegment)
         if (!returnType) return []
         currentTypeName = returnType

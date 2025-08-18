@@ -18,10 +18,16 @@
   let showQuickAdd = null;
   let searchTerm = $state('');
   let syncTimeout = null;
+  let isUpdating = false; // Prevent update loops
 
   $effect(() => {
     console.log('[v0] VisualBuilder: Setting up store subscription');
     const unsubscribe = graphqlStore.subscribe(state => {
+      if (isUpdating) {
+        console.log('[v0] VisualBuilder: Skipping update to prevent loop');
+        return;
+      }
+      
       console.log('[v0] VisualBuilder: Store state updated, syncing with text editor');
       
       if (state.queryStructure && state.queryStructure.operations.length > 0) {
@@ -54,6 +60,12 @@
     console.log('[v0] VisualBuilder: Updating current operation and syncing to text editor');
     if (!currentOperation) return;
     
+    if (isUpdating) {
+      console.log('[v0] VisualBuilder: Already updating, preventing loop');
+      return;
+    }
+    
+    isUpdating = true;
     graphqlStore.updateCurrentOperation(currentOperation);
     
     // Clear existing timeout to prevent multiple updates
@@ -66,6 +78,7 @@
       const queryText = buildQueryFromStructure(currentOperation);
       console.log('[v0] VisualBuilder: Built query text from visual structure:', queryText);
       graphqlStore.updateQuery(queryText);
+      isUpdating = false;
     }, 100);
   }
 
@@ -332,6 +345,7 @@
 
   function handleOperationTypeChange(event) {
     if (currentOperation) {
+      if (isUpdating) return;
       currentOperation.type = event.target.value;
       updateCurrentOperation();
     }
@@ -339,17 +353,20 @@
 
   function handleOperationNameInput(event) {
     if (currentOperation) {
+      if (isUpdating) return;
       currentOperation.name = event.target.value;
       updateCurrentOperation();
     }
   }
 
   function handleVariableNameInput(variable, event) {
+    if (isUpdating) return;
     variable.name = event.target.value;
     updateCurrentOperation();
   }
 
   function handleVariableTypeChange(variable, event) {
+    if (isUpdating) return;
     variable.type = event.target.value;
     updateCurrentOperation();
   }
