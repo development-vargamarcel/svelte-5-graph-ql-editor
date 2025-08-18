@@ -13,32 +13,13 @@
   let showSchema = $state(false);
   let showMobileMenu = $state(false);
   let darkMode = $state(false);
-  let logs = $state([]);
 
   const tabs = [
     { id: 'editor', label: 'Query Editor' },
     { id: 'visual', label: 'Visual Builder' },
     { id: 'variables', label: 'Variables' },
-    { id: 'results', label: 'Results' },
-    { id: 'logs', label: 'Debug Logs' }
+    { id: 'results', label: 'Results' }
   ];
-
-  $effect(() => {
-    const originalLog = console.log;
-    console.log = function(...args) {
-      originalLog.apply(console, args);
-      
-      const message = args.join(' ');
-      if (message.includes('[v0]')) {
-        const timestamp = new Date().toLocaleTimeString();
-        logs = [...logs.slice(-99), { timestamp, message }]; // Keep last 100 logs
-      }
-    };
-
-    return () => {
-      console.log = originalLog;
-    };
-  });
 
   function switchTab(tabId) {
     console.log('[v0] App.svelte: Switching to tab:', tabId);
@@ -58,11 +39,6 @@
   function toggleDarkMode() {
     console.log('[v0] App.svelte: Toggling dark mode:', !darkMode);
     darkMode = !darkMode;
-  }
-
-  function clearLogs() {
-    console.log('[v0] App.svelte: Clearing debug logs');
-    logs = [];
   }
 </script>
 
@@ -220,32 +196,6 @@
           <VariablesEditor {darkMode} />
         {:else if activeTab === 'results'}
           <ResultsPanel {darkMode} />
-        {:else if activeTab === 'logs'}
-          <!-- Added debug logs panel -->
-          <div class="h-full flex flex-col">
-            <div class="flex items-center justify-between mb-4">
-              <h2 class="text-lg font-semibold transition-colors duration-200 {darkMode ? 'text-white' : 'text-gray-900'}">Debug Logs</h2>
-              <button
-                onclick={clearLogs}
-                class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors duration-200"
-              >
-                Clear Logs
-              </button>
-            </div>
-            
-            <div class="flex-1 border rounded p-4 font-mono text-sm overflow-y-auto transition-colors duration-200 {darkMode ? 'bg-gray-800 border-gray-600 text-gray-300' : 'bg-white border-gray-300 text-gray-900'}">
-              {#if logs.length === 0}
-                <p class="transition-colors duration-200 {darkMode ? 'text-gray-500' : 'text-gray-500'}">No debug logs yet. Interact with the app to see logs appear here.</p>
-              {:else}
-                {#each logs as log}
-                  <div class="mb-1 border-b pb-1 transition-colors duration-200 {darkMode ? 'border-gray-700' : 'border-gray-200'}">
-                    <span class="transition-colors duration-200 {darkMode ? 'text-gray-400' : 'text-gray-500'}">[{log.timestamp}]</span>
-                    <span class="ml-2">{log.message}</span>
-                  </div>
-                {/each}
-              {/if}
-            </div>
-          </div>
         {/if}
       </div>
     </div>

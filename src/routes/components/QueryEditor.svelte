@@ -3,43 +3,24 @@
 
   console.log('[v0] QueryEditor.svelte: Initializing query editor component');
 
-  let { darkMode = false } = $props();
-
   let query = $state('');
   let isExecuting = $state(false);
-  let updateTimeout = null;
-  let syncEnabled = false; // Disable syncing to prevent loops
 
   // Subscribe to store changes
   $effect(() => {
     const unsubscribe = graphqlStore.subscribe(state => {
-      console.log('[v0] QueryEditor: Store state updated, query length:', state.query.length);
-      if (state.query !== query && syncEnabled) {
-        query = state.query;
-      }
+      console.log('[v0] QueryEditor: Store state updated:', state);
+      query = state.query;
       isExecuting = state.loading;
     });
     return unsubscribe;
   });
 
   function handleQueryChange(event) {
-    if (!syncEnabled) {
-      console.log('[v0] QueryEditor: Syncing disabled, not updating store');
-      return;
-    }
-    
     const newQuery = event.target.value;
-    console.log('[v0] QueryEditor: Query changed, new length:', newQuery.length);
+    console.log('[v0] QueryEditor: Query changed:', newQuery);
     query = newQuery;
-    
-    // Clear existing timeout to prevent multiple updates
-    if (updateTimeout) {
-      clearTimeout(updateTimeout);
-    }
-    
-    updateTimeout = setTimeout(() => {
-      graphqlStore.updateQuery(newQuery);
-    }, 300);
+    graphqlStore.updateQuery(newQuery);
   }
 
   async function executeQuery() {
@@ -59,37 +40,15 @@
     console.log('[v0] QueryEditor: Formatted query:', formatted);
     graphqlStore.updateQuery(formatted);
   }
-
-  function toggleSync() {
-    syncEnabled = !syncEnabled;
-    console.log('[v0] QueryEditor: Sync toggled:', syncEnabled);
-    if (syncEnabled) {
-      // Sync current query to store when re-enabling
-      graphqlStore.updateQuery(query);
-    }
-  }
 </script>
 
-<div class="h-full flex flex-col {darkMode ? 'text-white' : 'text-gray-900'}">
+<div class="h-full flex flex-col">
   <div class="flex items-center justify-between mb-4">
-    <div class="flex items-center space-x-4">
-      <h2 class="text-lg font-semibold">GraphQL Query Editor</h2>
-      <div class="flex items-center space-x-2">
-        <span class="px-2 py-1 rounded text-xs {syncEnabled ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}">
-          {syncEnabled ? '🔄 Sync ON' : '🚫 Sync OFF'}
-        </span>
-        <button
-          onclick={toggleSync}
-          class="px-2 py-1 rounded text-xs {syncEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white transition-colors"
-        >
-          {syncEnabled ? 'Disable Sync' : 'Enable Sync'}
-        </button>
-      </div>
-    </div>
+    <h2 class="text-lg font-semibold text-gray-900">GraphQL Query Editor</h2>
     <div class="flex space-x-2">
       <button
         onclick={formatQuery}
-        class="px-3 py-1 {darkMode ? 'bg-gray-600 hover:bg-gray-500' : 'bg-gray-500 hover:bg-gray-600'} text-white rounded text-sm"
+        class="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
       >
         Format
       </button>
@@ -103,21 +62,21 @@
     </div>
   </div>
 
-  <div class="flex-1 border rounded {darkMode ? 'border-gray-600' : 'border-gray-300'}">
+  <div class="flex-1 border border-gray-300 rounded">
     <textarea
       value={query}
       oninput={handleQueryChange}
       placeholder="Enter your GraphQL query here..."
-      class="w-full h-full p-4 font-mono text-sm resize-none border-none outline-none {darkMode ? 'bg-gray-800 text-white placeholder-gray-400' : 'bg-white text-gray-900 placeholder-gray-500'}"
+      class="w-full h-full p-4 font-mono text-sm resize-none border-none outline-none"
     ></textarea>
   </div>
 
-  <div class="mt-4 text-sm {darkMode ? 'text-gray-300' : 'text-gray-600'}">
+  <div class="mt-4 text-sm text-gray-600">
     <p>💡 <strong>Tips:</strong></p>
     <ul class="list-disc list-inside space-y-1 mt-2">
-      <li class="text-red-600">⚠️ Sync with Visual Builder is currently disabled</li>
+      <li>Use Ctrl+Space for autocomplete (when schema is loaded)</li>
       <li>Click "Format" to auto-indent your query</li>
-      <li>Visual Builder operates independently - enable sync to connect them</li>
+      <li>Switch to "Visual Builder" tab to build queries visually</li>
       <li>Check the "Variables" tab to define query variables</li>
     </ul>
   </div>

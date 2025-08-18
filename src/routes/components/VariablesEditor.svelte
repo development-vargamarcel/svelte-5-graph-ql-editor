@@ -6,18 +6,11 @@
   let variables = $state('{}');
   let isValidJson = $state(true);
   let parsedVariables = $state({});
-  let updateTimeout = null;
 
-  // Subscribe to store changes
-  $effect(() => {
-    const unsubscribe = graphqlStore.subscribe(state => {
-      console.log('[v0] VariablesEditor: Store state updated:', state);
-      if (state.variables !== variables) {
-        variables = state.variables;
-        validateAndParseJson();
-      }
-    });
-    return unsubscribe;
+  const unsubscribe = graphqlStore.subscribe(state => {
+    console.log('[v0] VariablesEditor: Store state updated:', state);
+    variables = state.variables;
+    validateAndParseJson();
   });
 
   function handleVariablesChange(event) {
@@ -25,15 +18,7 @@
     console.log('[v0] VariablesEditor: Variables changed:', newVariables);
     variables = newVariables;
     validateAndParseJson();
-    
-    // Debounce updates to prevent excessive calls
-    if (updateTimeout) {
-      clearTimeout(updateTimeout);
-    }
-    
-    updateTimeout = setTimeout(() => {
-      graphqlStore.updateVariables(newVariables);
-    }, 300);
+    graphqlStore.updateVariables(newVariables);
   }
 
   function validateAndParseJson() {

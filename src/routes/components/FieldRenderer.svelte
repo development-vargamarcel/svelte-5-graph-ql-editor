@@ -2,34 +2,18 @@
   import FieldRenderer from './FieldRenderer.svelte';
   import { graphqlStore } from '../stores/graphql-store.js';
   
-  let storeValue = $state(null);
-  let maxDepth = 10; // Prevent infinite recursion
 
   let { 
     field, 
     typeName, 
     selectedFields, 
     expandedFields, 
-    fieldPath = field.name,
     depth = 0,
     onFieldToggle,
     onExpandToggle 
   } = $props();
 
-  // Prevent infinite recursion by limiting depth
-  if (depth > maxDepth) {
-    console.warn('[v0] FieldRenderer: Maximum depth reached, preventing infinite recursion');
-  }
-
-  // Subscribe to store changes once
-  $effect(() => {
-    const unsubscribe = graphqlStore.subscribe(state => {
-      storeValue = state;
-    });
-    return unsubscribe;
-  });
-
-  console.log('[v0] FieldRenderer props:', { field, typeName, fieldPath, depth });
+  console.log('[v0] FieldRenderer props:', { field, typeName, depth });
 
   // Get the base type (unwrap NonNull and List wrappers)
   function getBaseType(type) {
@@ -53,19 +37,8 @@
   // Get fields for a type from schema
   function getFieldsForType(typeName) {
     console.log('[v0] Getting fields for type:', typeName);
-    
-    // Prevent circular references by checking if we're already processing this type in the current path
-    const pathTypes = fieldPath.split('.').map(segment => {
-      // Extract type information from field path if available
-      return segment;
-    });
-    
-    if (pathTypes.filter(t => t === typeName).length > 2) {
-      console.warn('[v0] FieldRenderer: Circular reference detected for type:', typeName);
-      return [];
-    }
-    
-    const type = storeValue?.schema?.types?.find(t => t.name === typeName);
+    const storeValue = graphqlStore.get();
+    const type = storeValue.schema?.types?.find(t => t.name === typeName);
     const fields = type?.fields || [];
     console.log('[v0] Found fields:', fields.length);
     return fields;
@@ -86,20 +59,20 @@
 
   // Handle field selection toggle
   function handleFieldToggle() {
-    console.log('[v0] Field toggle:', fieldPath);
-    onFieldToggle?.(fieldPath, field);
+    console.log('[v0] Field toggle:', field.name);
+    onFieldToggle?.(field.name);
   }
 
   // Handle expand/collapse toggle
   function handleExpandToggle() {
-    console.log('[v0] Expand toggle:', fieldPath);
-    onExpandToggle?.(fieldPath, field);
+    console.log('[v0] Expand toggle:', field.name);
+    onExpandToggle?.(field.name);
   }
 
   // Handle arguments expand/collapse
   function handleArgumentsToggle() {
-    console.log('[v0] Arguments toggle:', fieldPath);
-    onExpandToggle?.(`${fieldPath}:args`, field);
+    console.log('[v0] Arguments toggle:', field.name);
+    onExpandToggle?.(`${field.name}:args`);
   }
 
   // Format argument type and default value
@@ -112,10 +85,10 @@
   const baseType = $derived(getBaseType(field.type));
   const canExpand = $derived(isExpandableType(field.type));
   const subFields = $derived(canExpand ? getFieldsForType(baseType?.name) : []);
-  const isSelected = $derived(selectedFields?.has(fieldPath) || false);
-  const isExpanded = $derived(expandedFields?.has(fieldPath) || false);
+  const isSelected = $derived(selectedFields.has(field.name));
+  const isExpanded = $derived(expandedFields.has(field.name));
   const hasArguments = $derived(field.args && field.args.length > 0);
-  const argumentsExpanded = $derived(expandedFields?.has(`${fieldPath}:args`) || false);
+  const argumentsExpanded = $derived(expandedFields.has(`${field.name}:args`));
   
   // Check if we should show the field as expandable (has sub-fields or arguments)
   const shouldShowExpander = $derived(canExpand || hasArguments);
@@ -124,7 +97,6 @@
   $effect(() => {
     console.log('[v0] FieldRenderer state:', { 
       fieldName: field.name, 
-      fieldPath,
       isSelected, 
       isExpanded, 
       canExpand, 
@@ -136,11 +108,6 @@
   });
 </script>
 
-{#if depth > maxDepth}
-  <div class="text-red-500 text-sm p-2 border border-red-300 rounded">
-    ⚠️ Maximum nesting depth reached. Circular reference prevented.
-  </div>
-{:else}
 <div class="relative">
   <!-- Tree connection lines -->
   {#if depth > 0}
@@ -265,7 +232,6 @@
             typeName={baseType?.name}
             {selectedFields}
             {expandedFields}
-            fieldPath={`${fieldPath}.${subField.name}`}
             depth={depth + 1}
             {onFieldToggle}
             {onExpandToggle}
@@ -275,7 +241,6 @@
     </div>
   {/if}
 </div>
-{/if}
 
 <style>
   .field-item {

@@ -9,36 +9,25 @@
   let selectedType = $state(null);
   let storeState = $state({});
   
-  let expandedFields = $state(new Set()); // Tracks expanded state for nested fields
-  let selectedFields = $state(new Set()); // Tracks which fields are selected at each level
+  let nestedFieldState = $state(new Map()); // Tracks expanded/selected state for nested fields
+  let selectedFields = $state(new Map()); // Tracks which fields are selected at each level
+
+  graphqlStore.subscribe(state => {
+    console.log('[v0] SchemaExplorer: Store state updated:', state);
+    storeState = state;
+  });
 
   let filteredTypes = $state([]);
   let queryType = $state(null);
   let mutationType = $state(null);
 
-  // Subscribe to store changes
-  $effect(() => {
-    const unsubscribe = graphqlStore.subscribe(state => {
-      console.log('[v0] SchemaExplorer: Store state updated:', state);
-      storeState = state;
-    });
-    return unsubscribe;
-  });
-
-  // Update filtered types when schema or search term changes
-  $effect(() => {
-    if (storeState.schema) {
-      filteredTypes = storeState.schema.types?.filter(type => 
-        type.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !type.name.startsWith('__')
-      ) || [];
-      queryType = storeState.schema.queryType;
-      mutationType = storeState.schema.mutationType;
-    } else {
-      filteredTypes = [];
-      queryType = null;
-      mutationType = null;
-    }
+  run(() => {
+    filteredTypes = storeState.schema?.types?.filter(type => 
+      type.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !type.name.startsWith('__')
+    ) || [];
+    queryType = storeState.schema?.queryType;
+    mutationType = storeState.schema?.mutationType;
   });
 
   async function loadSchema() {
@@ -49,28 +38,35 @@
   function selectType(type) {
     console.log('[v0] SchemaExplorer: Selecting type:', type);
     selectedType = type;
-    expandedFields.clear();
+    nestedFieldState.clear();
     selectedFields.clear();
   }
 
-  function toggleFieldExpansion(fieldPath) {
+  function toggleFieldExpansion(fieldPath, field) {
     console.log('[v0] SchemaExplorer: Toggling field expansion for path:', fieldPath);
-    if (expandedFields.has(fieldPath)) {
-      expandedFields.delete(fieldPath);
-    } else {
-      expandedFields.add(fieldPath);
+    const currentState = nestedFieldState.get(fieldPath) || { expanded: false, fields: [] };
+    
+    if (!currentState.expanded) {
+      // Expand field - load its sub-fields if it's an object type
+      const fieldType = getFieldType(field);
+      const typeDefinition = storeState.schema?.types?.find(t => t.name === fieldType);
+      
+      if (typeDefinition && typeDefinition.fields) {
+        currentState.fields = typeDefinition.fields;
+        console.log('[v0] SchemaExplorer: Loaded sub-fields for', fieldPath, ':', typeDefinition.fields.length);
+      }
     }
-    expandedFields = new Set(expandedFields); // Trigger reactivity
+    
+    currentState.expanded = !currentState.expanded;
+    nestedFieldState.set(fieldPath, currentState);
+    nestedFieldState = new Map(nestedFieldState); // Trigger reactivity
   }
 
-  function toggleFieldSelection(fieldPath) {
+  function toggleFieldSelection(fieldPath, field) {
     console.log('[v0] SchemaExplorer: Toggling field selection for path:', fieldPath);
-    if (selectedFields.has(fieldPath)) {
-      selectedFields.delete(fieldPath);
-    } else {
-      selectedFields.add(fieldPath);
-    }
-    selectedFields = new Set(selectedFields); // Trigger reactivity
+    const isSelected = selectedFields.get(fieldPath) || false;
+    selectedFields.set(fieldPath, !isSelected);
+    selectedFields = new Map(selectedFields); // Trigger reactivity
     
     // Update query structure
     updateQueryFromSelection();
@@ -94,30 +90,15 @@
     
     if (!selectedType) return;
     
-    const buildNestedFields = (typeName, pathPrefix = '', visitedTypes = new Set(), depth = 0) => {
-      // Prevent infinite recursion
-      if (depth > 10) {
-        console.warn('[v0] SchemaExplorer: Maximum depth reached, preventing infinite recursion');
-        return [];
-      }
-      
-      // Prevent circular references
-      if (visitedTypes.has(typeName)) {
-        console.warn('[v0] SchemaExplorer: Circular reference detected for type:', typeName);
-        return [];
-      }
-      
+    const buildNestedFields = (typeName, pathPrefix = '') => {
       const fields = [];
       const typeDefinition = storeState.schema?.types?.find(t => t.name === typeName);
       
       if (!typeDefinition?.fields) return fields;
       
-      const newVisitedTypes = new Set(visitedTypes);
-      newVisitedTypes.add(typeName);
-      
       for (const field of typeDefinition.fields) {
         const fieldPath = pathPrefix ? `${pathPrefix}.${field.name}` : field.name;
-        const isSelected = selectedFields.has(fieldPath);
+        const isSelected = selectedFields.get(fieldPath);
         
         if (isSelected) {
           const fieldObj = {
@@ -138,7 +119,7 @@
           // Recursively build nested fields if this is an object type
           if (isObjectType(field)) {
             const fieldType = getFieldType(field);
-            fieldObj.fields = buildNestedFields(fieldType, fieldPath, newVisitedTypes, depth + 1);
+            fieldObj.fields = buildNestedFields(fieldType, fieldPath);
           }
           
           fields.push(fieldObj);
@@ -331,16 +312,7 @@
         
         <div class="space-y-1 max-h-60 overflow-y-auto border border-gray-200 rounded p-2">
           {#each selectedType.fields || [] as field}
-            <FieldRenderer 
-              {field} 
-              typeName={selectedType.name}
-              {selectedFields}
-              {expandedFields}
-              fieldPath={field.name}
-              depth={0}
-              onFieldToggle={toggleFieldSelection}
-              onExpandToggle={toggleFieldExpansion}
-            />
+            <FieldRenderer {field} pathPrefix="" depth={0} />
           {/each}
         </div>
         
@@ -348,7 +320,7 @@
           <div class="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
             <div class="font-medium text-blue-800">Selected Fields:</div>
             <div class="text-blue-700 mt-1">
-              {Array.from(selectedFields).join(', ')}
+              {Array.from(selectedFields.keys()).join(', ')}
             </div>
           </div>
         {/if}
